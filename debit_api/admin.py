@@ -1,8 +1,7 @@
 from django.contrib import admin
-from .models import User, Billing, Transaction, PendingTransaction
+from .models import Card, Billing, Transaction
 
 # Register your models here.
-admin.site.register(User)
+admin.site.register(Card)
 admin.site.register(Billing)
 admin.site.register(Transaction)
-admin.site.register(PendingTransaction)

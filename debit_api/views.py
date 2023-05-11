@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
-from .models import User, Billing, Transaction
+from .models import Card, Billing, Transaction
 import json
 
 # Create your views here.
@@ -30,7 +30,6 @@ def pay(request):
     email = form.get('email')
     currency = data.get('currency')
     reservationId = data.get('reservationId')
-
 
     transaction_id = None
    
