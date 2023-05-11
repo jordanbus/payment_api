@@ -20,7 +20,6 @@ def form(request):
 @csrf_exempt
 @require_http_methods(['POST'])
 def pay(request):
-
     data = json.loads(request.body)
     form = data.get('form')
     cardNumber = form.get('cardNumber')
@@ -28,12 +27,20 @@ def pay(request):
     expiryDate = form.get('expiryDate')
     name = form.get('name')
     email = form.get('email')
-    currency = data.get('currency')
-    reservationId = data.get('reservationId')
-
-    transaction_id = None
-   
-    return JsonResponse({'status': 'success', 'TransactionID': transaction_id})
+    transaction = data.get('transaction')
+    amount = transaction.get('transactionAmount')
+    currency = transaction.get('currency')
+    recipientAccount = transaction.get('recipientAccount')
+    reference = transaction.get('reference')
+    
+    # card = Card.objects.filter(cardNumber=cardNumber, cvv=cvv, expiryDate=expiryDate, name=name, email=email)
+    # if not card:
+    #     card = Card(cardNumber=cardNumber, cvv=cvv, expiryDate=expiryDate, name=name, email=email)
+    #     card.save()
+        
+    # transaction = Transaction(card=card, amount=amount, currency=currency, recipientAccount=recipientAccount, reference=reference)
+    # transaction = transaction.save()
+    return JsonResponse({'status': 'success', 'transactionID': None})
 
 
 @csrf_exempt
@@ -41,18 +48,15 @@ def pay(request):
 def refund(request):
 
     data = json.loads(request.body)
-    transaction_id = data.get('transactionID')
+    transactionId = data.get('transactionID')
     form = data.get('form')
     cardNumber = form.get('cardNumber')
     cvv = form.get('cvv')
     expiryDate = form.get('expiryDate')
     name = form.get('name')
-    email = form.get('email')
-    currency = data.get('currency')
-    reservationId = data.get('reservationId')
 
     try:
         pass
     except:
         return JsonResponse({'status': 'failed', 'error': 'Transaction does not exist'})
-    return JsonResponse({'status': 'success', 'transactionId': transaction_id})
+    return JsonResponse({'status': 'success', 'transactionId': transactionId})
