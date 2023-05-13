@@ -19,8 +19,6 @@ class BankService:
         
     def requestPayment(amount, currency, recipientAccount, bookingId):
         req = BANK_URL+'/bank/pay'
-        return True
-        
         try:
             response = requests.post(req, json={
                 'amount': amount,
@@ -34,8 +32,6 @@ class BankService:
         
     def requestRefund(bookingId):
         req = BANK_URL+'/bank/refund'
-        
-        return True
         try:
             response = requests.post(req, json={
                 'bookingId': bookingId
