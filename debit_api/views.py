@@ -158,37 +158,37 @@ def pay(request):
     # Convert currency to GBP for bank payment
     amountInGBP = convertCurrencyToGBP(amount, currency)
     if amountInGBP == -1:
-        return JsonResponse({'status': 'failed', 'error': f'Currency conversion not available for {currency}'})
+        return JsonResponse({'status': 'failed', 'error': f'Currency conversion not available for {currency}', 'transactionId': -1})
     
     # Make sure currency matches account currency or can be converted to account currency (ONLY GBP supported for now)
     accountCurrency = Card.objects.get(cardId=cardId).accountCurrency.currencyCode
     if accountCurrency != 'GBP':
         if currency != Card.objects.get(cardId=cardId).accountCurrency:
-            return JsonResponse({'status': 'failed', 'error': 'Currency mismatch with account. Please use the currency used for the account.'})
+            return JsonResponse({'status': 'failed', 'error': 'Currency mismatch with account. Please use the currency used for the account.',  'transactionId': -1})
     else:
         amount = amountInGBP
     
     # Check card balance
     if not checkCardBalance(cardId, amount):
-        return JsonResponse({'status': 'failed', 'error': 'Insufficient funds'})
+        return JsonResponse({'status': 'failed', 'error': 'Insufficient funds', 'transactionId': -1})
     
     
     # Start transaction
     transactionId = createTransaction(cardId, recipientAccount, amount)
     if transactionId == -1:
-        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be made. Please try again.'})
+        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be made. Please try again.', 'transactionId': transactionId})
     
     # Send request to bank
     accepted = BankService.requestPayment(amountInGBP, recipientAccount, bookingId)
     if not accepted:
         # Return user funds
-        return JsonResponse({'status': 'failed', 'error': 'Bank rejected payment'})
+        return JsonResponse({'status': 'failed', 'error': 'Bank rejected payment', 'transactionId': transactionId})
     
     # Confirm transaction
     confirmed = confirmTransaction(transactionId)
     if not confirmed:
         # Return user funds
-        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be confirmed. Please try again.'})
+        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be confirmed. Please try again.',  'transactionId': transactionId})
     
     # Return status and transaction ID
     return JsonResponse({'status': 'success', 'transactionID': transactionId})
