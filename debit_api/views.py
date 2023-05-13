@@ -2,11 +2,14 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
-from .models import Card, Billing, Transaction
+from .models import Card, Billing, Transaction, TransactionStatus
 import json
+from .bank_service import BankService
+from django.db import transaction
+import datetime
+import bcrypt
 
 # Create your views here.
-
 
 @require_http_methods(['GET'])
 def form(request):
@@ -16,10 +19,125 @@ def form(request):
                                     'name': 'string', 
                                     'email': 'string'}})
 
+def hashCardNumber(cardNumber, salt):
+    hashedCardNumber = bcrypt.hashpw(cardNumber.encode(), salt.encode())
+    return hashedCardNumber.decode()
+
+def getCardIdIfExists(cardNumber, cvv, expiryDate, name, email):
+    cardId = -1
+    if cardNumber and cvv and expiryDate and name and email:
+        card = Card.objects.filter(cvv=cvv, expiryDate=expiryDate, name=name, email=email).first()
+        if card and card.cardNumber == hashCardNumber(cardNumber, card.salt):
+            cardId = card.cardId
+    
+    return cardId
+
+def convertCurrency(amount, currency, cardId):
+    card = Card.objects.get(cardId=cardId)
+    if card:
+        accoundCurrency = card.accountCurrency.currencyCode
+        
+        if currency != accoundCurrency:
+            try:
+                amount = BankService.exchangeCurrency(amount, currency)
+            except:
+                return -1
+        return amount
+    else:
+        return -1
+
+def checkCardBalance(cardId, amount):
+    card = Card.objects.filter(cardId=cardId).first()
+    if card:
+        if card.balance >= amount:
+            return True
+    return False
+    
+def createTransaction(cardId, recipientName, amount):
+    transactionId = -1
+    try:
+        with transaction.atomic():
+            # Retrieve the card objects
+            card = Card.objects.select_for_update().get(cardId=cardId)
+
+            # Create the transaction object
+            newTransaction = Transaction(
+                card=card,
+                recipient=recipientName,
+                transactionAmount=amount,
+                transactionCurrencyId=1,
+                transactionFee=0,
+                status=TransactionStatus.PENDING.value
+            )
+            newTransaction.save()
+
+        # Commit the transaction
+        transaction.commit()
+        transactionId = newTransaction.transactionId
+
+    except Exception as e:
+        print(e)
+        # Handle the exception or rollback the transaction if needed
+        transaction.rollback()
+
+    return transactionId
+
+def confirmTransaction(transactionId):
+    try:
+        with transaction.atomic():
+            # Retrieve the transaction objects
+            userTransaction = Transaction.objects.select_for_update().get(transactionId=transactionId)
+            
+            # Retrieve the card objects
+            card = userTransaction.card
+            
+             # Perform necessary operations
+            card.balance -= userTransaction.transactionAmount
+            card.save()
+            
+            # Perform necessary operations
+            userTransaction.status = TransactionStatus.CONFIRMED.value
+            userTransaction.save()
+
+        # Commit the transaction
+        transaction.commit()
+        return True
+
+    except Exception as e:
+        # Handle the exception or rollback the transaction if needed
+        transaction.rollback()
+        return False
+    
+def refundTransaction(transactionId):
+    try:
+        with transaction.atomic():
+            # Retrieve the transaction objects
+            userTransaction = Transaction.objects.select_for_update().get(transactionId=transactionId)
+            
+            # Retrieve the card objects
+            card = userTransaction.card
+            
+             # Perform necessary operations
+            card.balance += userTransaction.transactionAmount
+            card.save()
+            
+            # Perform necessary operations
+            userTransaction.status = TransactionStatus.REFUNDED.value
+            userTransaction.save()
+
+            # Commit the transaction
+        transaction.commit()
+        return True
+    except Exception as e:
+        # Handle the exception or rollback the transaction if needed
+        transaction.rollback()
+        return False
 
 @csrf_exempt
 @require_http_methods(['POST'])
 def pay(request):
+    
+    # Get data from request
     data = json.loads(request.body)
     form = data.get('form')
     cardNumber = form.get('cardNumber')
@@ -31,17 +149,44 @@ def pay(request):
     amount = transaction.get('transactionAmount')
     currency = transaction.get('currency')
     recipientAccount = transaction.get('recipientAccount')
-    reference = transaction.get('reference')
+    bookingId = transaction.get('bookingId')
     
-    # card = Card.objects.filter(cardNumber=cardNumber, cvv=cvv, expiryDate=expiryDate, name=name, email=email)
-    # if not card:
-    #     card = Card(cardNumber=cardNumber, cvv=cvv, expiryDate=expiryDate, name=name, email=email)
-    #     card.save()
-        
-    # transaction = Transaction(card=card, amount=amount, currency=currency, recipientAccount=recipientAccount, reference=reference)
-    # transaction = transaction.save()
-    return JsonResponse({'status': 'success', 'transactionID': None})
-
+    # Check if card exists
+    cardId = getCardIdIfExists(cardNumber, cvv, expiryDate, name, email)
+    
+    if cardId == -1:
+        return JsonResponse({'status': 'failed', 'error': 'Card not found'})
+    
+    # Convert currency to account currency
+    amountInGBP = convertCurrency(amount, currency, cardId)
+    if amountInGBP == -1:
+        return JsonResponse({'status': 'failed', 'error': 'Currency not supported'})
+    
+    # Check card balance
+    if not checkCardBalance(cardId, amountInGBP):
+        return JsonResponse({'status': 'failed', 'error': 'Insufficient funds'})
+    
+    
+    # Start transaction
+    transactionId = createTransaction(cardId, recipientAccount, amountInGBP)
+    if transactionId == -1:
+        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be made. Please try again.'})
+    
+    # Send request to bank
+    accepted = BankService.requestPayment(amountInGBP, currency, recipientAccount, bookingId)
+    if not accepted:
+        # Return user funds
+        return JsonResponse({'status': 'failed', 'error': 'Bank rejected payment'})
+    
+    # Confirm transaction
+    confirmed = confirmTransaction(transactionId)
+    if not confirmed:
+        # Return user funds
+        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be confirmed. Please try again.'})
+    
+    # Return status and transaction ID
+    return JsonResponse({'status': 'success', 'transactionID': transactionId})
+    
 
 @csrf_exempt
 @require_http_methods(['POST'])
@@ -49,14 +194,32 @@ def refund(request):
 
     data = json.loads(request.body)
     transactionId = data.get('transactionID')
-    form = data.get('form')
-    cardNumber = form.get('cardNumber')
-    cvv = form.get('cvv')
-    expiryDate = form.get('expiryDate')
-    name = form.get('name')
+    bookingId = data.get('bookingID')
+    fields = data.get('fields')
+    cardNumber = fields.get('cardNumber')
+    cvv = fields.get('cvv')
+    expiryDate = fields.get('expiryDate')
+    name = fields.get('name')
+    
+    # Check if transaction exists for card details
+    transaction = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name).first()
+    if not(transaction and 
+           transaction.status == TransactionStatus.CONFIRMED.value and 
+           transaction.card.cardNumber == hashCardNumber(cardNumber, transaction.card.salt)):
+        return JsonResponse({'status': 'failed', 'error': 'Transaction not found'})
 
-    try:
-        pass
-    except:
-        return JsonResponse({'status': 'failed', 'error': 'Transaction does not exist'})
-    return JsonResponse({'status': 'success', 'transactionId': transactionId})
+    # Change transaction status
+    transaction = Transaction.objects.select_for_update().get(transactionId=transaction.transactionId)
+    transaction.status = TransactionStatus.REFUND_PENDING.value
+    transaction.save()
+
+    success = BankService.requestRefund(bookingId)
+
+    if not success:
+        return JsonResponse({'status': 'failed', 'error': 'Bank rejected refund'})
+    
+    success = refundTransaction(transactionId)
+    if not success:
+        return JsonResponse({'status': 'failed', 'error': 'Transaction could not be refunded. Please try again.'})
+    
+    return JsonResponse({'status': 'success'})
