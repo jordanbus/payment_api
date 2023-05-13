@@ -26,6 +26,9 @@ class Card(models.Model):
             hashedCardNumber = bcrypt.hashpw(self.cardNumber.encode(), salt)
             self.cardNumber = hashedCardNumber.decode()
             self.salt = salt.decode()
+        
+        # Set expiry date to first day of the month for all cards
+        self.expiryDate = self.expiryDate.replace(day=1)
         super().save(*args, **kwargs)
     
 class TransactionStatus(Enum):

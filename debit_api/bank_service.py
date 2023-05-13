@@ -17,7 +17,7 @@ class BankService:
         except:
             raise Exception('Unable to connect to bank service for currency exchange')
         
-    def requestPayment(amount, currency, recipientAccount, bookingId):
+    def requestPayment(amount, recipientAccount, bookingId):
         req = BANK_URL+'/bank/pay'
         try:
             response = requests.post(req, json={

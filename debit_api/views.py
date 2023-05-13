@@ -32,19 +32,13 @@ def getCardIdIfExists(cardNumber, cvv, expiryDate, name, email):
     
     return cardId
 
-def convertCurrency(amount, currency, cardId):
-    card = Card.objects.get(cardId=cardId)
-    if card:
-        accoundCurrency = card.accountCurrency.currencyCode
-        
-        if currency != accoundCurrency:
-            try:
-                amount = BankService.exchangeCurrency(amount, currency)
-            except:
-                return -1
-        return amount
-    else:
-        return -1
+def convertCurrencyToGBP(amount, currency):
+    if currency != 'GBP':
+        try:
+            amount = BankService.exchangeCurrency(amount, currency)
+        except:
+            return -1
+    return amount
 
 def checkCardBalance(cardId, amount):
     card = Card.objects.filter(cardId=cardId).first()
@@ -151,29 +145,41 @@ def pay(request):
     recipientAccount = transaction.get('recipientAccount')
     bookingId = transaction.get('bookingId')
     
+    expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
+    
     # Check if card exists
     cardId = getCardIdIfExists(cardNumber, cvv, expiryDate, name, email)
     
     if cardId == -1:
         return JsonResponse({'status': 'failed', 'error': 'Card not found'})
     
-    # Convert currency to account currency
-    amountInGBP = convertCurrency(amount, currency, cardId)
+   
+       
+    # Convert currency to GBP for bank payment
+    amountInGBP = convertCurrencyToGBP(amount, currency)
     if amountInGBP == -1:
-        return JsonResponse({'status': 'failed', 'error': 'Currency not supported'})
+        return JsonResponse({'status': 'failed', 'error': f'Currency conversion not available for {currency}'})
+    
+    # Make sure currency matches account currency or can be converted to account currency (ONLY GBP supported for now)
+    accountCurrency = Card.objects.get(cardId=cardId).accountCurrency.currencyCode
+    if accountCurrency != 'GBP':
+        if currency != Card.objects.get(cardId=cardId).accountCurrency:
+            return JsonResponse({'status': 'failed', 'error': 'Currency mismatch with account. Please use the currency used for the account.'})
+    else:
+        amount = amountInGBP
     
     # Check card balance
-    if not checkCardBalance(cardId, amountInGBP):
+    if not checkCardBalance(cardId, amount):
         return JsonResponse({'status': 'failed', 'error': 'Insufficient funds'})
     
     
     # Start transaction
-    transactionId = createTransaction(cardId, recipientAccount, amountInGBP)
+    transactionId = createTransaction(cardId, recipientAccount, amount)
     if transactionId == -1:
         return JsonResponse({'status': 'failed', 'error': 'Transaction could not be made. Please try again.'})
     
     # Send request to bank
-    accepted = BankService.requestPayment(amountInGBP, currency, recipientAccount, bookingId)
+    accepted = BankService.requestPayment(amountInGBP, recipientAccount, bookingId)
     if not accepted:
         # Return user funds
         return JsonResponse({'status': 'failed', 'error': 'Bank rejected payment'})
@@ -200,6 +206,8 @@ def refund(request):
     cvv = fields.get('cvv')
     expiryDate = fields.get('expiryDate')
     name = fields.get('name')
+    
+    expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
     
     # Check if transaction exists for card details
     transaction = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name).first()
