@@ -15,7 +15,8 @@ class BankService:
             print("Converted amount: ", response.json().get('convertedAmount'))
             return response.json().get('convertedAmount')
         except:
-            raise Exception('Unable to connect to bank service for currency exchange')
+            print('Unable to connect to bank service for currency exchange')
+            # raise Exception('Unable to connect to bank service for currency exchange')
         
     def requestPayment(amount, recipientAccount, bookingId):
         req = BANK_URL+'/bank/pay'
@@ -28,7 +29,8 @@ class BankService:
             print("Payment response: ", response.json())
             return response.json().get('status') == 'success'
         except:
-            raise Exception('Unable to connect to bank service for payment')
+            # raise Exception('Unable to connect to bank service for payment')
+            print('Unable to connect to bank service for payment')
         
     def requestRefund(bookingId):
         req = BANK_URL+'/bank/refund'
@@ -39,5 +41,6 @@ class BankService:
             print("Refund response: ", response.json())
             return response.json().get('status') == 'success'
         except:
-            raise Exception('Unable to connect to bank service for refund')
+            # raise Exception('Unable to connect to bank service for refund')
+            print('Unable to connect to bank service for refund')
         
