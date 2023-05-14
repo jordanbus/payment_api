@@ -18,10 +18,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from debit_api import urls as debit_urls
+from django.contrib.staticfiles.urls import static
+from .settings import STATIC_URL, STATIC_ROOT
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
     path('payments/', include(debit_urls)),
-    
+    static(STATIC_URL, document_root=STATIC_ROOT)
 ]
