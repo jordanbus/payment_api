@@ -145,7 +145,7 @@ def pay(request):
         name = fields.get('name')
         email = fields.get('email')
         transaction = data.get('transaction')
-        amount = transaction.get('transactionAmount')
+        amount = transaction.get('amount')
         currency = transaction.get('currency')
         recipientAccount = transaction.get('recipientAccount')
         bookingId = transaction.get('bookingID')
