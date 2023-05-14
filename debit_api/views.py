@@ -171,7 +171,7 @@ def pay(request):
     # Make sure currency matches account currency or can be converted to account currency (ONLY GBP supported for now)
     accountCurrency = Card.objects.get(cardId=cardId).accountCurrency.currencyCode
     if accountCurrency != 'GBP':
-        if currency != Card.objects.get(cardId=cardId).accountCurrency:
+        if currency != Card.objects.get(cardId=cardId).accountCurrency.currencyCode:
             return JsonResponse({'status': 'failed', 'error': 'Currency mismatch with account. Please use the currency used for the account.',  'transactionId': -1})
     else:
         amount = amountInGBP
