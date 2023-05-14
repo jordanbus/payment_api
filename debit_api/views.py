@@ -26,14 +26,14 @@ def getCardIdIfExists(cardNumber, cvv, expiryDate, name, email):
     return cardId
 
 def convertCurrencyToGBP(amount, currency):
-    amount = -1
     if currency != 'GBP':
         try:
             amount = BankService.exchangeCurrency(amount, currency)
             if amount is None:
-                amount = -1
+                return -1
         except:
             print('Error converting currency')
+            return -1
     return amount
 
 def checkCardBalance(cardId, amount):
