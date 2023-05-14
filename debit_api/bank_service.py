@@ -32,7 +32,7 @@ class BankService:
                     payload = {
                         'amount': amount,
                         'companyName': recipientAccount,
-                        'bookingID': bookingId
+                        'BookingID': bookingId
                     } 
                     print("Payment request: ", payload)
                     response = requests.post(req, json=payload)
@@ -52,7 +52,7 @@ class BankService:
 
                 try:
                     payload = {
-                        'bookingID': bookingId
+                        'BookingID': bookingId
                     }
                     print("Refund request: ", payload)
                     response = requests.post(req, json=payload)
