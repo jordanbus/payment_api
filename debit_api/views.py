@@ -148,7 +148,7 @@ def pay(request):
         amount = transaction.get('transactionAmount')
         currency = transaction.get('currency')
         recipientAccount = transaction.get('recipientAccount')
-        bookingId = transaction.get('bookingId')
+        bookingId = transaction.get('bookingID')
         
         expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
     except:
