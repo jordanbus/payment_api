@@ -148,7 +148,7 @@ def pay(request):
         amount = transaction.get('amount')
         currency = transaction.get('currency')
         recipientAccount = transaction.get('recipientAccount')
-        bookingId = transaction.get('bookingID')
+        bookingId = transaction.get('BookingID')
         
         expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
     except:
@@ -209,7 +209,7 @@ def refund(request):
     try:
         data = json.loads(request.body)
         transactionId = data.get('TransactionID')
-        bookingId = data.get('bookingID')
+        bookingId = data.get('BookingID')
         fields = data.get('fields')
         cardNumber = fields.get('cardNumber')
         cvv = fields.get('cvv')
