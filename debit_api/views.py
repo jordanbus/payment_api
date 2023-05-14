@@ -11,13 +11,6 @@ import bcrypt
 
 # Create your views here.
 
-@require_http_methods(['GET'])
-def form(request):
-    return JsonResponse({'fields': {'cardNumber': 'string',
-                                    'cvv': 'string', 
-                                    'expiryDate': 'date', 
-                                    'name': 'string', 
-                                    'email': 'string'}})
 
 def hashCardNumber(cardNumber, salt):
     hashedCardNumber = bcrypt.hashpw(cardNumber.encode(), salt.encode())
@@ -126,26 +119,38 @@ def refundTransaction(transactionId):
         # Handle the exception or rollback the transaction if needed
         transaction.rollback()
         return False
+    
+
+@require_http_methods(['GET'])
+def form(request):
+    return JsonResponse({'fields': {'cardNumber': 'Enter your card number: ',
+                                    'cvv': 'Enter your CVV: ', 
+                                    'expiryDate': 'Enter your expiry date (MM/YY): ', 
+                                    'name': 'Enter your full name: ', 
+                                    'email': 'Enter your email address: '}})
 
 @csrf_exempt
 @require_http_methods(['POST'])
 def pay(request):
+    try:
+        # Get data from request
+        data = json.loads(request.body)
+        fields = data.get('fields')
+        cardNumber = fields.get('cardNumber')
+        cvv = fields.get('cvv')
+        expiryDate = fields.get('expiryDate')
+        name = fields.get('name')
+        email = fields.get('email')
+        transaction = data.get('transaction')
+        amount = transaction.get('transactionAmount')
+        currency = transaction.get('currency')
+        recipientAccount = transaction.get('recipientAccount')
+        bookingId = transaction.get('bookingId')
+        
+        expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
+    except:
+        return JsonResponse({'status': 'failed', 'error': 'Invalid . Could not parse JSON'})
     
-    # Get data from request
-    data = json.loads(request.body)
-    fields = data.get('fields')
-    cardNumber = fields.get('cardNumber')
-    cvv = fields.get('cvv')
-    expiryDate = fields.get('expiryDate')
-    name = fields.get('name')
-    email = fields.get('email')
-    transaction = data.get('transaction')
-    amount = transaction.get('transactionAmount')
-    currency = transaction.get('currency')
-    recipientAccount = transaction.get('recipientAccount')
-    bookingId = transaction.get('bookingId')
-    
-    expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
     
     # Check if card exists
     cardId = getCardIdIfExists(cardNumber, cvv, expiryDate, name, email)
@@ -181,13 +186,13 @@ def pay(request):
     # Send request to bank
     accepted = BankService.requestPayment(amountInGBP, recipientAccount, bookingId)
     if not accepted:
-        # Return user funds
+        # Remove pending transaction
+        Transaction.objects.filter(transactionId=transactionId).delete()
         return JsonResponse({'status': 'failed', 'error': 'Bank rejected payment', 'transactionId': transactionId})
     
     # Confirm transaction
     confirmed = confirmTransaction(transactionId)
     if not confirmed:
-        # Return user funds
         return JsonResponse({'status': 'failed', 'error': 'Transaction could not be confirmed. Please try again.',  'transactionId': transactionId})
     
     # Return status and transaction ID
@@ -198,16 +203,21 @@ def pay(request):
 @require_http_methods(['POST'])
 def refund(request):
 
-    data = json.loads(request.body)
-    transactionId = data.get('transactionID')
-    bookingId = data.get('bookingID')
-    fields = data.get('fields')
-    cardNumber = fields.get('cardNumber')
-    cvv = fields.get('cvv')
-    expiryDate = fields.get('expiryDate')
-    name = fields.get('name')
+    try:
+        data = json.loads(request.body)
+        transactionId = data.get('transactionID')
+        bookingId = data.get('bookingID')
+        fields = data.get('fields')
+        cardNumber = fields.get('cardNumber')
+        cvv = fields.get('cvv')
+        expiryDate = fields.get('expiryDate')
+        name = fields.get('name')
+        
+        expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
+    except:
+        return JsonResponse({'status': 'failed', 'error': 'Invalid . Could not parse JSON'})
     
-    expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
+    
     
     # Check if transaction exists for card details
     transaction = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name).first()
@@ -224,6 +234,9 @@ def refund(request):
     success = BankService.requestRefund(bookingId)
 
     if not success:
+        # Revert refund status to confirmed if not refunded
+        transaction.status = TransactionStatus.CONFIRMED.value
+        transaction.save()
         return JsonResponse({'status': 'failed', 'error': 'Bank rejected refund'})
     
     success = refundTransaction(transactionId)
