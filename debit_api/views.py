@@ -26,11 +26,14 @@ def getCardIdIfExists(cardNumber, cvv, expiryDate, name, email):
     return cardId
 
 def convertCurrencyToGBP(amount, currency):
+    amount = -1
     if currency != 'GBP':
         try:
             amount = BankService.exchangeCurrency(amount, currency)
+            if amount is None:
+                amount = -1
         except:
-            return -1
+            print('Error converting currency')
     return amount
 
 def checkCardBalance(cardId, amount):
@@ -216,8 +219,6 @@ def refund(request):
         expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
     except:
         return JsonResponse({'status': 'failed', 'error': 'Invalid . Could not parse JSON'})
-    
-    
     
     # Check if transaction exists for card details
     transaction = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name).first()
