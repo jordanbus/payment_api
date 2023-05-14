@@ -199,7 +199,7 @@ def pay(request):
         return JsonResponse({'status': 'failed', 'error': 'Transaction could not be confirmed. Please try again.',  'transactionId': transactionId})
     
     # Return status and transaction ID
-    return JsonResponse({'status': 'success', 'transactionID': transactionId})
+    return JsonResponse({'status': 'success', 'TransactionID': transactionId})
     
 
 @csrf_exempt
@@ -208,7 +208,7 @@ def refund(request):
 
     try:
         data = json.loads(request.body)
-        transactionId = data.get('transactionID')
+        transactionId = data.get('TransactionID')
         bookingId = data.get('bookingID')
         fields = data.get('fields')
         cardNumber = fields.get('cardNumber')
