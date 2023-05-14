@@ -133,12 +133,12 @@ def pay(request):
     
     # Get data from request
     data = json.loads(request.body)
-    form = data.get('form')
-    cardNumber = form.get('cardNumber')
-    cvv = form.get('cvv')
-    expiryDate = form.get('expiryDate')
-    name = form.get('name')
-    email = form.get('email')
+    fields = data.get('fields')
+    cardNumber = fields.get('cardNumber')
+    cvv = fields.get('cvv')
+    expiryDate = fields.get('expiryDate')
+    name = fields.get('name')
+    email = fields.get('email')
     transaction = data.get('transaction')
     amount = transaction.get('transactionAmount')
     currency = transaction.get('currency')
