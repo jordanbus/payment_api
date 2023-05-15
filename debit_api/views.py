@@ -65,7 +65,7 @@ def createTransaction(cardId, recipientName, amount):
         status=TransactionStatus.PENDING.value
     )
     newTransaction.save()
-
+    transactionId = newTransaction.transactionId
     return transactionId
 
 #  Confirm transaction and deduct funds from card balance
