@@ -54,13 +54,12 @@ def createTransaction(cardId, recipientName, amount):
     
     # Retrieve the card object
     card = Card.objects.select_for_update().get(cardId=cardId)
-
     # Create the transaction object
     newTransaction = Transaction(
         card=card,
         recipient=recipientName,
         transactionAmount=amount,
-        transactionCurrencyId=card.accountCurrency.currencyId,
+        transactionCurrency=card.accountCurrency,
         transactionFee=0,
         # Status is pending since not confirmed by bank yet
         status=TransactionStatus.PENDING.value
