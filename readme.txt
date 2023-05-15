@@ -2,7 +2,7 @@
 
 i. The name of your pythonanywhere domain.
 
-[http://sc20jwb.pythonanywhere.com/](http://sc20jwb.pythonanywhere.com/)
+http://sc20jwb.pythonanywhere.com/
 
 /payments/refund
 
