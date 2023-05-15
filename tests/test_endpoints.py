@@ -10,7 +10,7 @@ testCards = [
     {
         "cardNumber": "4619648111834096287",
         "cvv": "140",
-        "expiryDate": datetime.datetime.strptime("2033-05-13", "%Y-%m-%d"),
+        "expiryDate": "05/33",
         "cardType": "Debit",
         "name": "Sharon Castaneda",
         "email": "scastaneda@email.com"
@@ -18,7 +18,7 @@ testCards = [
     {
         "cardNumber": "4235151774575",
         "cvv": "423",
-        "expiryDate": datetime.datetime.strptime("2024-05-13", "%Y-%m-%d"),
+        "expiryDate": "05/24",
         "cardType": "Debit",
         "name": "Michael Ramsey",
         "email": "michael.ramsey@email.com"
@@ -26,7 +26,7 @@ testCards = [
     {
         "cardNumber": "639028529274",
         "cvv": "454",
-        "expiryDate": datetime.datetime.strptime("2028-06-10", "%Y-%m-%d"),
+        "expiryDate": "06/28",
         "cardType": "Debit",
         "name": "Sarah Johnson",
         "email": "johnsonsarah@email.com"
@@ -44,13 +44,11 @@ airlines = [
 def test_form_endpoint():
     response = requests.get(HOST+'payments/form')
     assert response.status_code == 200
-    assert response.json() == {'fields': {
-        'cardNumber': 'string',
-        'cvv': 'string',
-        'expiryDate': 'date',
-        'name': 'string',
-        'email': 'string'
-    }}
+    assert response.json() == {'fields': {'cardNumber': 'Enter your card number: ',
+                                    'cvv': 'Enter your CVV: ', 
+                                    'expiryDate': 'Enter your expiry date (MM/YY): ', 
+                                    'name': 'Enter your full name: ', 
+                                    'email': 'Enter your email address: '}}
     
 def test_pay_endpoint():
     card = testCards[random.randint(0, len(testCards)-1)]
@@ -58,7 +56,7 @@ def test_pay_endpoint():
         'form': {
             'cardNumber': card['cardNumber'],
             'cvv': card['cvv'], 
-            'expiryDate': card['expiryDate'].strftime("%Y-%m-%d"), 
+            'expiryDate': card['expiryDate'], 
             'name': card['name'], 
             'email': card['email'],
         },
@@ -71,7 +69,7 @@ def test_pay_endpoint():
     })
     
     assert response.status_code == 200
-    assert response.json() == {'status': 'success', 'transactionID': None}
+    assert response.json().get('status') == 'success'
     
 def test_refund_endpoint():
     card = testCards[random.randint(0, len(testCards)-1)]
@@ -82,7 +80,7 @@ def test_refund_endpoint():
         'form': {
             'cardNumber': card['cardNumber'],
             'cvv': card['cvv'], 
-            'expiryDate': card['expiryDate'].strftime("%Y-%m-%d"), 
+            'expiryDate': card['expiryDate'], 
             'name': card['name'], 
             'email': card['email'],
         },
