@@ -11,20 +11,24 @@ import bcrypt
 
 # Create your views here.
 
-
+#  Hash the card number using the salt
 def hashCardNumber(cardNumber, salt):
     hashedCardNumber = bcrypt.hashpw(cardNumber.encode(), salt.encode())
     return hashedCardNumber.decode()
 
+#  Search for a card using specified parameters
 def getCardIdIfExists(cardNumber, cvv, expiryDate, name, email):
     cardId = -1
     if cardNumber and cvv and expiryDate and name and email:
-        card = Card.objects.filter(cvv=cvv, expiryDate=expiryDate, name=name, email=email).first()
-        if card and card.cardNumber == hashCardNumber(cardNumber, card.salt):
-            cardId = card.cardId
+        cards = Card.objects.filter(cvv=cvv, expiryDate=expiryDate, name=name, email=email)
+        for card in cards:
+            # Make sure the card exists and the card number matches the hashed card number in the db
+            if card and card.cardNumber == hashCardNumber(cardNumber, card.salt):
+                cardId = card.cardId
     
     return cardId
 
+#  Convert the amount to GBP if necessary
 def convertCurrencyToGBP(amount, currency):
     if currency != 'GBP':
         try:
@@ -36,56 +40,50 @@ def convertCurrencyToGBP(amount, currency):
             return -1
     return amount
 
+#  Check if the card exists and has sufficient balance
 def checkCardBalance(cardId, amount):
     card = Card.objects.filter(cardId=cardId).first()
     if card:
         if card.balance >= amount:
             return True
     return False
-    
+
+# Create a pending transaction object for the booking
 def createTransaction(cardId, recipientName, amount):
     transactionId = -1
-    try:
-        with transaction.atomic():
-            # Retrieve the card objects
-            card = Card.objects.select_for_update().get(cardId=cardId)
+    
+    # Retrieve the card object
+    card = Card.objects.select_for_update().get(cardId=cardId)
 
-            # Create the transaction object
-            newTransaction = Transaction(
-                card=card,
-                recipient=recipientName,
-                transactionAmount=amount,
-                transactionCurrencyId=1,
-                transactionFee=0,
-                status=TransactionStatus.PENDING.value
-            )
-            newTransaction.save()
-
-        # Commit the transaction
-        transaction.commit()
-        transactionId = newTransaction.transactionId
-
-    except Exception as e:
-        print(e)
-        # Handle the exception or rollback the transaction if needed
-        transaction.rollback()
+    # Create the transaction object
+    newTransaction = Transaction(
+        card=card,
+        recipient=recipientName,
+        transactionAmount=amount,
+        transactionCurrencyId=card.accountCurrency.currencyId,
+        transactionFee=0,
+        # Status is pending since not confirmed by bank yet
+        status=TransactionStatus.PENDING.value
+    )
+    newTransaction.save()
 
     return transactionId
 
+#  Confirm transaction and deduct funds from card balance
 def confirmTransaction(transactionId):
     try:
         with transaction.atomic():
-            # Retrieve the transaction objects
+            # Retrieve the transaction object
             userTransaction = Transaction.objects.select_for_update().get(transactionId=transactionId)
             
-            # Retrieve the card objects
+            # Retrieve the card object
             card = userTransaction.card
             
-             # Perform necessary operations
+             # Remove the amount from the card balance
             card.balance -= userTransaction.transactionAmount
             card.save()
             
-            # Perform necessary operations
+            # Set the transaction status to confirmed
             userTransaction.status = TransactionStatus.CONFIRMED.value
             userTransaction.save()
 
@@ -94,24 +92,25 @@ def confirmTransaction(transactionId):
         return True
 
     except Exception as e:
-        # Handle the exception or rollback the transaction if needed
+        # Rollback the transaction, since an error occurred
         transaction.rollback()
         return False
     
+# Refund transaction and return funds to card balance
 def refundTransaction(transactionId):
     try:
         with transaction.atomic():
-            # Retrieve the transaction objects
+            # Retrieve the transaction object
             userTransaction = Transaction.objects.select_for_update().get(transactionId=transactionId)
             
-            # Retrieve the card objects
+            # Retrieve the card object
             card = userTransaction.card
             
-             # Perform necessary operations
+             # Return the amount to the card balance
             card.balance += userTransaction.transactionAmount
             card.save()
             
-            # Perform necessary operations
+            # Set the transaction status to refunded
             userTransaction.status = TransactionStatus.REFUNDED.value
             userTransaction.save()
 
@@ -119,11 +118,12 @@ def refundTransaction(transactionId):
         transaction.commit()
         return True
     except Exception as e:
-        # Handle the exception or rollback the transaction if needed
+        # Rollback the transaction, since an error occurred
         transaction.rollback()
         return False
     
 
+# Return form fields to use for card payment
 @require_http_methods(['GET'])
 def form(request):
     return JsonResponse({'fields': {'cardNumber': 'Enter your card number: ',
@@ -132,6 +132,7 @@ def form(request):
                                     'name': 'Enter your full name: ', 
                                     'email': 'Enter your email address: '}})
 
+# Make a payment for a booking
 @csrf_exempt
 @require_http_methods(['POST'])
 def pay(request):
@@ -160,7 +161,6 @@ def pay(request):
     
     if cardId == -1:
         return JsonResponse({'status': 'failed', 'error': 'Card not found'})
-    
    
        
     # Convert currency to GBP for bank payment
@@ -174,6 +174,7 @@ def pay(request):
         if currency != Card.objects.get(cardId=cardId).accountCurrency.currencyCode:
             return JsonResponse({'status': 'failed', 'error': 'Currency mismatch with account. Please use the currency used for the account.',  'transactionId': -1})
     else:
+        # If user's account is in GBP, then allow other currencies since they will be converted to GBP
         amount = amountInGBP
     
     # Check card balance
@@ -181,7 +182,7 @@ def pay(request):
         return JsonResponse({'status': 'failed', 'error': 'Insufficient funds', 'transactionId': -1})
     
     
-    # Start transaction
+    # Start a pending transaction
     transactionId = createTransaction(cardId, recipientAccount, amount)
     if transactionId == -1:
         return JsonResponse({'status': 'failed', 'error': 'Transaction could not be made. Please try again.', 'transactionId': transactionId})
@@ -189,11 +190,11 @@ def pay(request):
     # Send request to bank
     accepted = BankService.requestPayment(amountInGBP, recipientAccount, bookingId)
     if not accepted:
-        # Remove pending transaction
+        # Remove pending transaction since no confirmation from bank
         Transaction.objects.filter(transactionId=transactionId).delete()
         return JsonResponse({'status': 'failed', 'error': 'Bank rejected payment', 'transactionId': transactionId})
     
-    # Confirm transaction
+    # Confirm transaction and deduct funds after confirmation from bank
     confirmed = confirmTransaction(transactionId)
     if not confirmed:
         return JsonResponse({'status': 'failed', 'error': 'Transaction could not be confirmed. Please try again.',  'transactionId': transactionId})
@@ -221,14 +222,18 @@ def refund(request):
         return JsonResponse({'status': 'failed', 'error': 'Invalid . Could not parse JSON'})
     
     # Check if transaction exists for card details
-    transaction = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name).first()
-    if not(transaction and 
-           transaction.status == TransactionStatus.CONFIRMED.value and 
-           transaction.card.cardNumber == hashCardNumber(cardNumber, transaction.card.salt)):
+    transactions = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name)
+    transactionId = -1
+    for transaction in transactions:
+        if transaction.status == TransactionStatus.CONFIRMED.value and transaction.card.cardNumber == hashCardNumber(cardNumber, transaction.card.salt):
+            transactionId = transaction.transactionId
+            break
+    
+    if transactionId == -1:
         return JsonResponse({'status': 'failed', 'error': 'Transaction not found'})
 
     # Change transaction status
-    transaction = Transaction.objects.select_for_update().get(transactionId=transaction.transactionId)
+    transaction = Transaction.objects.select_for_update().get(transactionId=transactionId)
     transaction.status = TransactionStatus.REFUND_PENDING.value
     transaction.save()
 
