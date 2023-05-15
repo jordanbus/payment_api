@@ -43,7 +43,7 @@ class Transaction(models.Model):
     card = models.ForeignKey(Card, on_delete=models.CASCADE, related_name='transactionCard')
     transactionDate = models.DateTimeField(auto_now_add=True)
     transactionAmount = models.FloatField()
-    transactionCurrencyId = models.IntegerField()
+    transactionCurrency = models.ForeignKey('Currency', on_delete=models.DO_NOTHING, related_name='transactionCurrency')
     transactionFee = models.FloatField()
     status = models.IntegerField()
     recipient = models.CharField(max_length = 180)
