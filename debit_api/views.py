@@ -154,6 +154,8 @@ def pay(request):
     except:
         return JsonResponse({'status': 'failed', 'error': 'Invalid . Could not parse JSON'})
     
+    if fields is None or cardNumber is None or cvv is None or expiryDate is None or name is None or email is None or transaction is None or amount is None or currency is None or recipientAccount is None or bookingId is None:
+        return JsonResponse({'status': 'failed', 'error': 'Invalid request. Missing fields'})
     
     # Check if card exists
     cardId = getCardIdIfExists(cardNumber, cvv, expiryDate, name, email)
@@ -219,6 +221,9 @@ def refund(request):
         expiryDate = datetime.datetime.strptime(expiryDate, '%m/%y').date()
     except:
         return JsonResponse({'status': 'failed', 'error': 'Invalid . Could not parse JSON'})
+    
+    if transactionId is None or bookingId is None or fields is None or cardNumber is None or cvv is None or expiryDate is None or name is None:
+        return JsonResponse({'status': 'failed', 'error': 'Invalid request. Missing fields'})
     
     # Check if transaction exists for card details
     transactions = Transaction.objects.filter(transactionId=transactionId, card__cvv=cvv, card__expiryDate=expiryDate, card__name=name)
